@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b7772" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="مَسار" />
+  <title>مَسار — إحالات الطلاب</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="authView" class="auth-view" hidden>
+    <div class="auth-ambient ambient-one"></div>
+    <div class="auth-ambient ambient-two"></div>
+    <main class="auth-card">
+      <div class="auth-logo" aria-hidden="true">م</div>
+      <div class="auth-brand">مَسار</div>
+      <div class="auth-tagline">إحالة ذكية • متابعة راقية</div>
+
+      <form id="loginForm" class="auth-form" hidden>
+        <div class="field">
+          <label for="loginEmail">البريد الإلكتروني</label>
+          <input id="loginEmail" class="input" type="email" autocomplete="username" placeholder="name@school.sa" required />
+        </div>
+        <div class="field">
+          <label for="loginPassword">كلمة المرور</label>
+          <input id="loginPassword" class="input" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
+        </div>
+        <button id="loginBtn" class="primary-btn" type="submit">دخول إلى مَسار</button>
+      </form>
+
+      <div id="demoGate" class="demo-gate" hidden>
+        <div class="notice compact">لم يتم إدخال بيانات Supabase بعد. يمكنك تجربة النسخة محليًا، ثم تفعيل الحسابات الحقيقية عند إضافة بيانات الربط.</div>
+        <button id="enterDemo" class="primary-btn" type="button">دخول نسخة المعاينة</button>
+      </div>
+
+      <p id="authStatus" class="auth-status"></p>
+      <div class="auth-foot">مخصص للاستخدام المدرسي • الإصدار 0.2</div>
+    </main>
+  </div>
+
+  <div id="appShell" class="app-shell" hidden>
+    <header class="topbar">
+      <div class="brand-wrap">
+        <div class="brand-mark" aria-hidden="true">م</div>
+        <div>
+          <h1 class="brand">مَسار</h1>
+          <p class="brand-sub">إحالة ذكية • متابعة راقية</p>
+        </div>
+      </div>
+      <button id="accountChip" class="role-chip" type="button" aria-label="الحساب"></button>
+    </header>
+
+    <main id="app" class="content"></main>
+
+    <nav class="bottom-nav" aria-label="التنقل الرئيسي">
+      <button class="nav-btn active" data-route="home">
+        <span class="nav-icon">⌂</span><span>الرئيسية</span>
+      </button>
+      <button class="nav-btn" data-route="referrals">
+        <span class="nav-icon">⇄</span><span>الإحالات</span>
+      </button>
+      <button class="fab" data-route="new" aria-label="إحالة جديدة">＋</button>
+      <button class="nav-btn" data-route="students">
+        <span class="nav-icon">♙</span><span>الطلاب</span>
+      </button>
+      <button class="nav-btn" data-route="settings">
+        <span class="nav-icon">⚙</span><span>الإعدادات</span>
+      </button>
+    </nav>
+  </div>
+
+  <dialog id="accountDialog" class="dialog">
+    <div class="dialog-card">
+      <div class="dialog-head">
+        <div>
+          <h2>الحساب</h2>
+          <p id="accountSubtitle"></p>
+        </div>
+        <button id="closeAccountDialog" class="icon-btn" type="button" aria-label="إغلاق">×</button>
+      </div>
+      <div id="accountDialogBody" class="role-grid"></div>
+    </div>
+  </dialog>
+
+  <dialog id="entityDialog" class="dialog">
+    <form id="entityForm" class="dialog-card">
+      <div class="dialog-head">
+        <div>
+          <h2 id="entityTitle">إضافة</h2>
+          <p id="entitySubtitle"></p>
+        </div>
+        <button id="closeEntityDialog" class="icon-btn" type="button" aria-label="إغلاق">×</button>
+      </div>
+      <div id="entityFields" class="dialog-fields"></div>
+      <button class="primary-btn" type="submit">حفظ</button>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
