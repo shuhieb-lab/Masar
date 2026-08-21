@@ -2,7 +2,7 @@ const CONFIG = window.MASAR_CONFIG || {};
 const DEMO_STORAGE_KEY = 'masar_v02_demo_state';
 const DEMO_ROLE_KEY = 'masar_v02_demo_role';
 
-const roleNames = { teacher: 'المعلم', vice: 'الوكيل', admin: 'المدير' };
+const roleNames = { teacher: 'المعلم', vice: 'الوكيل' };
 const statusNames = { pending: 'بانتظار الرد', answered: 'تم الرد', closed: 'مغلقة' };
 
 const seed = {
@@ -78,7 +78,7 @@ function backendConfigured() {
 function currentRole() { return mode === 'cloud' ? profile?.role : demoRole; }
 function currentName() {
   if (mode === 'cloud') return profile?.full_name || session?.user?.email || 'مستخدم مَسار';
-  return demoRole === 'teacher' ? 'أ. عبدالله السلطان' : demoRole === 'vice' ? 'أ. خالد العتيبي' : 'أ. مدير المدرسة';
+  return demoRole === 'teacher' ? 'أ. عبدالله السلطان' : 'أ. خالد العتيبي';
 }
 function saveDemo() { localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(state)); }
 function loadDemo() {
@@ -284,7 +284,7 @@ function renderHome() {
       <div class="quick">
         ${role === 'teacher' ? `<button class="gold-quick" data-go="new"><b>إحالة جديدة</b><span>اختيار طالب وإرسال الحالة للوكيل</span></button>` : ''}
         ${role === 'vice' ? `<button class="gold-quick" data-filter-go="pending"><b>بانتظار الإجراء</b><span>${counts.pending} إحالة تحتاج إلى رد</span></button>` : ''}
-        ${role === 'admin' ? `<button class="gold-quick" data-go="students"><b>إدارة الطلاب</b><span>إضافة فصل وإسناد الطلاب إليه</span></button>` : ''}
+        ${role === 'vice' ? `<button class="gold-quick" data-go="students"><b>إدارة الطلاب والفصول</b><span>إضافة الفصول وإسناد الطلاب إليها</span></button>` : ''}
         <button data-go="referrals"><b>سجل الإحالات</b><span>متابعة المعاملات وحالاتها</span></button>
       </div>
     </section>
@@ -503,14 +503,14 @@ function renderDetail() {
 
 function renderStudents() {
   const role = currentRole();
-  const canEdit = role === 'admin';
+  const canEdit = role === 'vice';
   app.innerHTML = `
     <div class="page-head">
       <div class="kicker">البيانات الأساسية</div>
       <h2 class="page-title">الطلاب والفصول</h2>
       <p class="page-sub">أنشئ الفصول أولًا، ثم أسند كل طالب إلى فصله.</p>
     </div>
-    ${!canEdit ? `<div class="notice">يمكنك مشاهدة البيانات، بينما الإضافة والتعديل متاحان لحساب المدير.</div>` : ''}
+    ${!canEdit ? `<div class="notice">يمكن للمعلم مشاهدة البيانات، بينما الإضافة والتعديل متاحان لحساب الوكيل.</div>` : ''}
     <section class="card">
       <div class="section-head"><h3>الفصول</h3>${canEdit ? `<button id="addClass">+ إضافة فصل</button>` : ''}</div>
       <div>${state.classes.length ? state.classes.map((item) => `
