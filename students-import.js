@@ -27,6 +27,7 @@
     .class-student-row b{color:#173f3b}
     .student-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
     .student-actions button{border:1px solid #d5e4e1;background:#fff;border-radius:11px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+    .student-edit{color:#765b17!important;background:#fffaf0!important;border-color:#ead9a7!important}
     .student-move{color:#0b7772}
     .student-delete{color:#a64027;border-color:#e3c6bd!important}
     .class-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
@@ -275,6 +276,103 @@
       .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
   }
 
+  async function updateStudentName(studentId, newName) {
+    const student = state.students.find((item) => String(item.id) === String(studentId));
+    if (!student) throw new Error('الطالب غير موجود');
+
+    const clean = cleanName(newName);
+    if (clean.length < 2) throw new Error('اكتب اسم الطالب بشكل صحيح');
+
+    const duplicate = state.students.some((item) =>
+      isActiveStudent(item) &&
+      String(item.id) !== String(studentId) &&
+      String(item.class_id) === String(student.class_id) &&
+      cleanName(item.name).toLocaleLowerCase('ar') === clean.toLocaleLowerCase('ar')
+    );
+    if (duplicate) throw new Error('يوجد طالب بنفس الاسم في هذا الفصل');
+
+    if (mode === 'cloud') {
+      const { error } = await supabaseClient
+        .from('students')
+        .update({ name: clean })
+        .eq('id', studentId);
+      if (error) throw error;
+      await refreshCloudData(true);
+    } else {
+      student.name = clean;
+      saveDemo();
+    }
+  }
+
+  function openEditStudentDialog(studentId) {
+    const student = state.students.find((item) => String(item.id) === String(studentId));
+    if (!student) return;
+
+    const editDialog = document.createElement('dialog');
+    editDialog.className = 'dialog';
+    editDialog.innerHTML = `
+      <form class="dialog-card move-dialog-card">
+        <div class="dialog-head">
+          <div>
+            <h2>تعديل اسم الطالب</h2>
+            <p>${esc(classNameById(student.class_id))}</p>
+          </div>
+          <button type="button" class="icon-btn" data-close-edit aria-label="إغلاق">×</button>
+        </div>
+
+        <div class="field">
+          <label>اسم الطالب</label>
+          <input id="editStudentName" class="input" value="${esc(student.name)}" maxlength="160" required />
+        </div>
+
+        <button class="primary-btn" type="submit">حفظ التعديل</button>
+      </form>`;
+
+    document.body.appendChild(editDialog);
+
+    const closeButton = editDialog.querySelector('[data-close-edit]');
+    const input = editDialog.querySelector('#editStudentName');
+    const form = editDialog.querySelector('form');
+    const saveButton = form.querySelector('.primary-btn');
+
+    closeButton.onclick = () => editDialog.close();
+
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const newName = cleanName(input.value);
+      if (!newName) {
+        toastMsg('اكتب اسم الطالب');
+        input.focus();
+        return;
+      }
+
+      saveButton.disabled = true;
+      saveButton.textContent = 'جاري الحفظ...';
+
+      try {
+        await updateStudentName(studentId, newName);
+        editDialog.close();
+        editDialog.remove();
+        renderClassStudents(selectedClassId);
+        toastMsg('تم تعديل اسم الطالب');
+      } catch (error) {
+        saveButton.disabled = false;
+        saveButton.textContent = 'حفظ التعديل';
+        toastMsg(error.message || 'تعذر تعديل اسم الطالب');
+      }
+    };
+
+    editDialog.addEventListener('close', () => {
+      if (editDialog.isConnected) editDialog.remove();
+    });
+
+    editDialog.showModal();
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 80);
+  }
+
   async function moveStudent(studentId, targetClassId) {
     const student = state.students.find((item) => String(item.id) === String(studentId));
     if (!student) return;
@@ -408,6 +506,7 @@
               <div><b>${esc(student.name)}</b></div>
               ${canEdit ? `
                 <div class="student-actions">
+                  <button type="button" class="student-edit" data-edit-student="${esc(student.id)}">تعديل الاسم</button>
                   <button type="button" class="student-move" data-move-student="${esc(student.id)}">نقل</button>
                   <button type="button" class="student-delete" data-delete-student="${esc(student.id)}" data-student-name="${esc(student.name)}">حذف</button>
                 </div>` : ''}
@@ -425,6 +524,10 @@
       document.getElementById('classAddOne').onclick = () => openStudentDialog(classId);
       document.getElementById('classAddBulk').onclick = () => openBulkStudentsDialog(classId, 'bulk');
       document.getElementById('classAddExcel').onclick = () => openBulkStudentsDialog(classId, 'excel');
+
+      document.querySelectorAll('[data-edit-student]').forEach((button) => {
+        button.onclick = () => openEditStudentDialog(button.dataset.editStudent);
+      });
 
       document.querySelectorAll('[data-move-student]').forEach((button) => {
         button.onclick = () => openMoveStudentDialog(button.dataset.moveStudent);
