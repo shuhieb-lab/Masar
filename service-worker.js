@@ -1,4 +1,4 @@
-const CACHE = 'masar-v043';
+const CACHE = 'masar-v044';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './app.js',
   './students-import.js',
   './teachers.js',
+  './backup.js',
   './config.js',
   './manifest.webmanifest',
   './icon-192.png',
@@ -41,6 +42,8 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('app.js') ||
     url.pathname.endsWith('/students-import.js') ||
     url.pathname.endsWith('students-import.js') ||
+    url.pathname.endsWith('/backup.js') ||
+    url.pathname.endsWith('backup.js') ||
     url.pathname.endsWith('/teachers.js') ||
     url.pathname.endsWith('teachers.js') ||
     url.pathname.endsWith('/config.js') ||
