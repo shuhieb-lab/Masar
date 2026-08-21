@@ -11,6 +11,12 @@
     .teacher-card b{display:block;color:#173f3b}
     .teacher-card span{display:block;margin-top:4px;color:#6f7f7b;font-size:12px}
     .teacher-reset{border:1px solid #d5e4e1;background:#fff;color:#0b7772;border-radius:11px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800}
+    .teacher-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+    .teacher-status{display:inline-flex!important;align-items:center;gap:5px;width:max-content;padding:4px 8px;border-radius:999px;font-size:11px!important;font-weight:800}
+    .teacher-status.active{background:#eaf7f3;color:#08776b}
+    .teacher-status.stopped{background:#fff1ed;color:#a64027}
+    .teacher-toggle{border:1px solid #e2c6bd;background:#fff;color:#a64027;border-radius:11px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800}
+    .teacher-toggle.enable{border-color:#b9dcd4;color:#08776b;background:#f5fbf9}
     .teacher-login-note{background:#f8f3e6;border:1px solid #ead9a7;border-radius:14px;padding:12px 14px;line-height:1.8;color:#71591d}
     .password-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     @media(max-width:560px){.password-grid{grid-template-columns:1fr}}
@@ -28,6 +34,8 @@
     if (code === 'INVALID_NAME' || code === 'INVALID_USERNAME') return 'تحقق من اسم المعلم.';
     if (code === 'FORBIDDEN') return 'إضافة المعلمين متاحة لحساب الوكيل فقط.';
     if (code === 'UNAUTHORIZED') return 'انتهت الجلسة. سجّل الدخول من جديد.';
+    if (code === 'ACCOUNT_DISABLED') return 'هذا الحساب موقوف من الوكيل.';
+    if (code === 'STATUS_FAILED') return 'تعذر تغيير حالة المعلم.';
     return error?.message || data?.detail || 'تعذر تنفيذ العملية.';
   }
 
@@ -165,7 +173,7 @@
   async function fetchTeachers() {
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('id, full_name, username, role, subject, created_at')
+      .select('id, full_name, username, role, subject, created_at, is_active')
       .eq('role', 'teacher')
       .order('full_name');
 
@@ -178,14 +186,30 @@
       return '<div class="empty"><div class="empty-icon">◎</div>لم تتم إضافة معلمين بعد</div>';
     }
 
-    return teachers.map((teacher) => `
-      <div class="teacher-card">
-        <div>
-          <b>${esc(teacher.full_name || 'معلم')}</b>
-          <span>اسم الدخول: ${esc(teacher.username || teacher.full_name || '—')}</span>
-        </div>
-        <button class="teacher-reset" type="button" data-reset-teacher="${esc(teacher.id)}" data-teacher-name="${esc(teacher.full_name || 'المعلم')}">كلمة مرور مؤقتة</button>
-      </div>`).join('');
+    return teachers.map((teacher) => {
+      const active = teacher.is_active !== false;
+      return `
+        <div class="teacher-card">
+          <div>
+            <b>${esc(teacher.full_name || 'معلم')}</b>
+            <span>اسم الدخول: ${esc(teacher.username || teacher.full_name || '—')}</span>
+            <span class="teacher-status ${active ? 'active' : 'stopped'}">${active ? '● نشط' : '● موقوف'}</span>
+          </div>
+          <div class="teacher-actions">
+            <button class="teacher-reset" type="button"
+              data-reset-teacher="${esc(teacher.id)}"
+              data-teacher-name="${esc(teacher.full_name || 'المعلم')}">
+              كلمة مرور مؤقتة
+            </button>
+            <button class="teacher-toggle ${active ? '' : 'enable'}" type="button"
+              data-toggle-teacher="${esc(teacher.id)}"
+              data-teacher-name="${esc(teacher.full_name || 'المعلم')}"
+              data-active="${active ? 'true' : 'false'}">
+              ${active ? 'إيقاف المعلم' : 'تفعيل المعلم'}
+            </button>
+          </div>
+        </div>`;
+    }).join('');
   }
 
   async function renderTeachers() {
@@ -256,6 +280,30 @@
 
             if (error || data?.error) return toastMsg(readableFunctionError(data, error));
             toastMsg('تم تعيين كلمة المرور المؤقتة');
+          };
+        });
+
+        list.querySelectorAll('[data-toggle-teacher]').forEach((button) => {
+          button.onclick = async () => {
+            const teacherId = button.dataset.toggleTeacher;
+            const teacherName = button.dataset.teacherName;
+            const isActive = button.dataset.active === 'true';
+            const nextActive = !isActive;
+
+            const question = isActive
+              ? `إيقاف حساب ${teacherName}؟\nلن يستطيع الدخول إلى مَسار، وستبقى إحالاته السابقة محفوظة.`
+              : `إعادة تفعيل حساب ${teacherName}؟`;
+            if (!confirm(question)) return;
+
+            button.disabled = true;
+            const { data, error } = await supabaseClient.functions.invoke('masar-auth', {
+              body: { action: 'set_teacher_active', teacher_id: teacherId, active: nextActive }
+            });
+            button.disabled = false;
+
+            if (error || data?.error) return toastMsg(readableFunctionError(data, error));
+            toastMsg(nextActive ? 'تم تفعيل المعلم' : 'تم إيقاف المعلم');
+            await reloadTeachers();
           };
         });
       } catch (error) {
