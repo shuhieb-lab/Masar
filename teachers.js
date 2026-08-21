@@ -10,6 +10,7 @@
     .teacher-card:last-child{border-bottom:0}
     .teacher-card b{display:block;color:#173f3b}
     .teacher-card span{display:block;margin-top:4px;color:#6f7f7b;font-size:12px}
+    .teacher-edit{border:1px solid #ead9a7;background:#fffaf0;color:#765b17;border-radius:11px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800}
     .teacher-reset{border:1px solid #d5e4e1;background:#fff;color:#0b7772;border-radius:11px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800}
     .teacher-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
     .teacher-status{display:inline-flex!important;align-items:center;gap:5px;width:max-content;padding:4px 8px;border-radius:999px;font-size:11px!important;font-weight:800}
@@ -36,6 +37,7 @@
     if (code === 'UNAUTHORIZED') return 'انتهت الجلسة. سجّل الدخول من جديد.';
     if (code === 'ACCOUNT_DISABLED') return 'هذا الحساب موقوف من الوكيل.';
     if (code === 'STATUS_FAILED') return 'تعذر تغيير حالة المعلم.';
+    if (code === 'PROFILE_FAILED' || code === 'ALIAS_FAILED') return 'تعذر تعديل بيانات المعلم.';
     return error?.message || data?.detail || 'تعذر تنفيذ العملية.';
   }
 
@@ -196,6 +198,11 @@
             <span class="teacher-status ${active ? 'active' : 'stopped'}">${active ? '● نشط' : '● موقوف'}</span>
           </div>
           <div class="teacher-actions">
+            <button class="teacher-edit" type="button"
+              data-edit-teacher="${esc(teacher.id)}"
+              data-teacher-name="${esc(teacher.full_name || 'المعلم')}">
+              تعديل الاسم
+            </button>
             <button class="teacher-reset" type="button"
               data-reset-teacher="${esc(teacher.id)}"
               data-teacher-name="${esc(teacher.full_name || 'المعلم')}">
@@ -263,6 +270,34 @@
         const teachers = await fetchTeachers();
         document.getElementById('teachersCount').textContent = `${teachers.length} معلم`;
         list.innerHTML = teacherRows(teachers);
+
+        list.querySelectorAll('[data-edit-teacher]').forEach((button) => {
+          button.onclick = async () => {
+            const teacherId = button.dataset.editTeacher;
+            const currentName = button.dataset.teacherName;
+            const newNameRaw = prompt(`تعديل اسم المعلم\n\nالاسم الحالي: ${currentName}`, currentName);
+            if (newNameRaw === null) return;
+
+            const newName = normalizeName(newNameRaw);
+            if (newName.length < 2) return toastMsg('اكتب اسم المعلم بشكل صحيح');
+            if (newName === currentName) return toastMsg('لم يتم تغيير الاسم');
+
+            button.disabled = true;
+            const { data, error } = await supabaseClient.functions.invoke('masar-auth', {
+              body: {
+                action: 'update_teacher_name',
+                teacher_id: teacherId,
+                full_name: newName
+              }
+            });
+            button.disabled = false;
+
+            if (error || data?.error) return toastMsg(readableFunctionError(data, error));
+
+            toastMsg('تم تعديل اسم المعلم');
+            await reloadTeachers();
+          };
+        });
 
         list.querySelectorAll('[data-reset-teacher]').forEach((button) => {
           button.onclick = async () => {
