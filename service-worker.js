@@ -1,4 +1,4 @@
-const CACHE = 'masar-v038';
+const CACHE = 'masar-v039';
 const ASSETS = [
   './',
   './index.html',

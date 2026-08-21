@@ -19,6 +19,19 @@
     .student-class-block:last-child{border-bottom:0}
     .student-class-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
     .student-class-top span{font-size:12px;color:#687774}
+    .class-open{border:0;background:transparent;padding:0;text-align:right;font:inherit;color:inherit;cursor:pointer;min-width:120px}
+    .class-open b{font-size:18px;color:#173f3b}
+    .class-open small{display:block;margin-top:6px;color:#0b7772;font-size:12px;font-weight:800}
+    .class-student-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid rgba(15,44,41,.08)}
+    .class-student-row:last-child{border-bottom:0}
+    .class-student-row b{color:#173f3b}
+    .student-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+    .student-actions button{border:1px solid #d5e4e1;background:#fff;border-radius:11px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+    .student-move{color:#0b7772}
+    .student-delete{color:#a64027;border-color:#e3c6bd!important}
+    .class-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+    .class-toolbar button{flex:1;min-width:115px}
+    .move-dialog-card{width:min(94vw,500px)}
   `;
   document.head.appendChild(style);
 
@@ -66,6 +79,14 @@
 
   function cleanName(value) {
     return String(value ?? '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function isActiveStudent(student) {
+    return student?.is_active !== false;
+  }
+
+  function activeStudents() {
+    return state.students.filter(isActiveStudent);
   }
 
   function isHeader(value) {
@@ -203,7 +224,7 @@
 
     const existingKeys = new Set(
       state.students
-        .filter((student) => String(student.class_id) === String(bulkTargetClassId))
+        .filter((student) => isActiveStudent(student) && String(student.class_id) === String(bulkTargetClassId))
         .map((student) => cleanName(student.name).toLocaleLowerCase('ar'))
     );
 
@@ -227,7 +248,7 @@
       } else {
         const stamp = Date.now();
         newNames.forEach((name, index) => {
-          state.students.push({ id: `s${stamp}${index}`, name, class_id: bulkTargetClassId });
+          state.students.push({ id: `s${stamp}${index}`, name, class_id: bulkTargetClassId, is_active: true });
         });
         saveDemo();
       }
@@ -246,20 +267,205 @@
     }
   });
 
+  let selectedClassId = null;
+
+  function currentClassStudents(classId) {
+    return state.students
+      .filter((student) => isActiveStudent(student) && String(student.class_id) === String(classId))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
+  }
+
+  async function moveStudent(studentId, targetClassId) {
+    const student = state.students.find((item) => String(item.id) === String(studentId));
+    if (!student) return;
+
+    if (mode === 'cloud') {
+      const { error } = await supabaseClient
+        .from('students')
+        .update({ class_id: targetClassId })
+        .eq('id', studentId);
+      if (error) throw error;
+      await refreshCloudData(true);
+    } else {
+      student.class_id = targetClassId;
+      saveDemo();
+    }
+  }
+
+  async function archiveStudent(studentId) {
+    const student = state.students.find((item) => String(item.id) === String(studentId));
+    if (!student) return;
+
+    if (mode === 'cloud') {
+      const { error } = await supabaseClient
+        .from('students')
+        .update({ is_active: false })
+        .eq('id', studentId);
+      if (error) throw error;
+      await refreshCloudData(true);
+    } else {
+      student.is_active = false;
+      saveDemo();
+    }
+  }
+
+  function openMoveStudentDialog(studentId) {
+    const student = state.students.find((item) => String(item.id) === String(studentId));
+    if (!student) return;
+
+    const targets = state.classes.filter((item) => String(item.id) !== String(student.class_id));
+    if (!targets.length) {
+      toastMsg('لا يوجد فصل آخر لنقل الطالب إليه');
+      return;
+    }
+
+    const moveDialog = document.createElement('dialog');
+    moveDialog.className = 'dialog';
+    moveDialog.innerHTML = `
+      <form class="dialog-card move-dialog-card">
+        <div class="dialog-head">
+          <div>
+            <h2>نقل الطالب</h2>
+            <p>${esc(student.name)}</p>
+          </div>
+          <button type="button" class="icon-btn" data-close-move aria-label="إغلاق">×</button>
+        </div>
+        <div class="field">
+          <label>الفصل الجديد</label>
+          <select class="select" id="moveStudentTarget" required>
+            <option value="">اختر الفصل</option>
+            ${targets.map((item) => `<option value="${esc(item.id)}">${esc(classNameById(item.id))}</option>`).join('')}
+          </select>
+        </div>
+        <button class="primary-btn" type="submit">نقل الطالب</button>
+      </form>`;
+
+    document.body.appendChild(moveDialog);
+    moveDialog.querySelector('[data-close-move]').onclick = () => moveDialog.close();
+
+    moveDialog.querySelector('form').onsubmit = async (event) => {
+      event.preventDefault();
+      const target = moveDialog.querySelector('#moveStudentTarget').value;
+      if (!target) return;
+
+      const button = moveDialog.querySelector('.primary-btn');
+      button.disabled = true;
+      button.textContent = 'جاري النقل...';
+
+      try {
+        await moveStudent(studentId, target);
+        moveDialog.close();
+        moveDialog.remove();
+        renderClassStudents(selectedClassId);
+        toastMsg(`تم نقل ${student.name}`);
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'نقل الطالب';
+        toastMsg(`تعذر نقل الطالب: ${error.message || 'خطأ غير معروف'}`);
+      }
+    };
+
+    moveDialog.addEventListener('close', () => {
+      if (moveDialog.isConnected) moveDialog.remove();
+    });
+    moveDialog.showModal();
+  }
+
+  function renderClassStudents(classId) {
+    selectedClassId = classId;
+    const classItem = classById(classId);
+    if (!classItem) {
+      renderStudents();
+      return;
+    }
+
+    const canEdit = currentRole() === 'vice';
+    const students = currentClassStudents(classId);
+
+    app.innerHTML = `
+      <div class="page-head">
+        <div class="kicker">الفصل</div>
+        <h2 class="page-title">${esc(classNameById(classId))}</h2>
+        <p class="page-sub">${students.length} طالب في هذا الفصل</p>
+      </div>
+
+      ${canEdit ? `
+        <div class="class-toolbar">
+          <button class="secondary-btn" id="classAddOne">+ طالب واحد</button>
+          <button class="secondary-btn" id="classAddBulk">إضافة جماعية</button>
+          <button class="secondary-btn" id="classAddExcel">استيراد Excel</button>
+        </div>` : ''}
+
+      <section class="section card">
+        <div class="section-head">
+          <h3>طلاب الفصل</h3>
+          <span class="count-chip">${students.length} طالب</span>
+        </div>
+
+        <div id="classStudentList">
+          ${students.length ? students.map((student) => `
+            <div class="class-student-row">
+              <div><b>${esc(student.name)}</b></div>
+              ${canEdit ? `
+                <div class="student-actions">
+                  <button type="button" class="student-move" data-move-student="${esc(student.id)}">نقل</button>
+                  <button type="button" class="student-delete" data-delete-student="${esc(student.id)}" data-student-name="${esc(student.name)}">حذف</button>
+                </div>` : ''}
+            </div>`).join('') : `<div class="empty"><div class="empty-icon">◎</div>لا يوجد طلاب في هذا الفصل</div>`}
+        </div>
+      </section>
+
+      <section class="section">
+        <button class="secondary-btn" id="backToClasses" type="button">العودة إلى الفصول</button>
+      </section>`;
+
+    document.getElementById('backToClasses').onclick = () => renderStudents();
+
+    if (canEdit) {
+      document.getElementById('classAddOne').onclick = () => openStudentDialog(classId);
+      document.getElementById('classAddBulk').onclick = () => openBulkStudentsDialog(classId, 'bulk');
+      document.getElementById('classAddExcel').onclick = () => openBulkStudentsDialog(classId, 'excel');
+
+      document.querySelectorAll('[data-move-student]').forEach((button) => {
+        button.onclick = () => openMoveStudentDialog(button.dataset.moveStudent);
+      });
+
+      document.querySelectorAll('[data-delete-student]').forEach((button) => {
+        button.onclick = async () => {
+          const studentId = button.dataset.deleteStudent;
+          const studentName = button.dataset.studentName;
+          const ok = confirm(`حذف ${studentName} من قوائم الطلاب؟\n\nستبقى إحالاته وتقاريره السابقة محفوظة في النظام.`);
+          if (!ok) return;
+
+          button.disabled = true;
+          try {
+            await archiveStudent(studentId);
+            renderClassStudents(classId);
+            toastMsg('تم حذف الطالب من القوائم');
+          } catch (error) {
+            button.disabled = false;
+            toastMsg(`تعذر حذف الطالب: ${error.message || 'خطأ غير معروف'}`);
+          }
+        };
+      });
+    }
+  }
+
   renderStudents = function () {
     const role = currentRole();
     const canEdit = role === 'vice';
+    const active = activeStudents();
 
     app.innerHTML = `
       <div class="page-head">
         <div class="kicker">البيانات الأساسية</div>
         <h2 class="page-title">الطلاب والفصول</h2>
-        <p class="page-sub">أنشئ الفصول أولًا، ثم أضف الطلاب يدويًا أو جماعيًا أو من Excel.</p>
+        <p class="page-sub">اضغط على اسم الفصل لاستعراض طلابه أو نقلهم وإدارة بياناتهم.</p>
       </div>
 
       ${!canEdit
         ? `<div class="notice">يمكن للمعلم مشاهدة بيانات الطلاب، بينما إدارة الطلاب والفصول متاحة للوكيل.</div>`
-        : `<div class="success-note">يمكنك إضافة طالب واحد، أو لصق قائمة أسماء، أو استيرادها من Excel.</div>`}
+        : `<div class="success-note">اضغط على أي فصل للدخول إلى قائمة طلابه، ومن هناك يمكنك نقل طالب أو حذفه.</div>`}
 
       <section class="card">
         <div class="section-head">
@@ -268,40 +474,48 @@
         </div>
 
         <div>
-          ${state.classes.length ? state.classes.map((item) => `
-            <div class="student-class-block">
-              <div class="student-class-top">
-                <div>
-                  <b>${esc(classNameById(item.id))}</b><br>
-                  <span>${state.students.filter((student) => String(student.class_id) === String(item.id)).length} طالب</span>
+          ${state.classes.length ? state.classes.map((item) => {
+            const count = active.filter((student) => String(student.class_id) === String(item.id)).length;
+            return `
+              <div class="student-class-block">
+                <div class="student-class-top">
+                  <button type="button" class="class-open" data-open-class="${esc(item.id)}">
+                    <b>${esc(classNameById(item.id))}</b>
+                    <span>${count} طالب</span>
+                    <small>استعراض الطلاب ←</small>
+                  </button>
                 </div>
-              </div>
 
-              ${canEdit ? `
-                <div class="class-actions">
-                  <button type="button" data-addstudent="${esc(item.id)}">+ طالب واحد</button>
-                  <button type="button" class="bulk-main" data-bulkstudents="${esc(item.id)}">إضافة جماعية</button>
-                  <button type="button" class="excel-btn" data-excelstudents="${esc(item.id)}">استيراد Excel</button>
-                </div>` : ''}
-            </div>`).join('') : `<div class="empty">لم تتم إضافة فصول بعد</div>`}
+                ${canEdit ? `
+                  <div class="class-actions">
+                    <button type="button" data-addstudent="${esc(item.id)}">+ طالب واحد</button>
+                    <button type="button" class="bulk-main" data-bulkstudents="${esc(item.id)}">إضافة جماعية</button>
+                    <button type="button" class="excel-btn" data-excelstudents="${esc(item.id)}">استيراد Excel</button>
+                  </div>` : ''}
+              </div>`;
+          }).join('') : `<div class="empty">لم تتم إضافة فصول بعد</div>`}
         </div>
       </section>
 
       <section class="section card">
         <div class="section-head">
           <h3>جميع الطلاب</h3>
-          <span class="count-chip">${state.students.length} طالب</span>
+          <span class="count-chip">${active.length} طالب</span>
         </div>
         <div class="search-wrap">
           <input id="studentSearch" class="input" placeholder="بحث باسم الطالب..." />
         </div>
-        <div id="studentsList">${studentsListHtml(state.students)}</div>
+        <div id="studentsList">${studentsListHtml(active)}</div>
       </section>`;
+
+    document.querySelectorAll('[data-open-class]').forEach((button) => {
+      button.onclick = () => renderClassStudents(button.dataset.openClass);
+    });
 
     const search = document.getElementById('studentSearch');
     search.oninput = () => {
       const query = search.value.trim();
-      const list = state.students.filter((student) => student.name.includes(query));
+      const list = active.filter((student) => student.name.includes(query));
       document.getElementById('studentsList').innerHTML = studentsListHtml(list);
     };
 
@@ -321,6 +535,28 @@
       });
     }
   };
+
+  // لا نعرض الطلاب المحذوفين عند إنشاء إحالة جديدة.
+  if (typeof renderNewReferral === 'function') {
+    const originalRenderNewReferral = renderNewReferral;
+    renderNewReferral = function () {
+      originalRenderNewReferral();
+
+      const classSelect = document.getElementById('classSelect');
+      const studentSelect = document.getElementById('studentSelect');
+      if (!classSelect || !studentSelect) return;
+
+      classSelect.onchange = () => {
+        const students = state.students.filter(
+          (student) => isActiveStudent(student) && String(student.class_id) === String(classSelect.value)
+        );
+        studentSelect.disabled = !classSelect.value;
+        studentSelect.innerHTML = `<option value="">اختر الطالب</option>${students.map(
+          (student) => `<option value="${esc(student.id)}">${esc(student.name)}</option>`
+        ).join('')}`;
+      };
+    };
+  }
 
   window.openBulkStudentsDialog = openBulkStudentsDialog;
 })();
