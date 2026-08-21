@@ -54,7 +54,7 @@
     const report = document.createElement('div');
     report.id = 'masarPdfReport';
     report.dir = 'rtl';
-    report.style.cssText = 'position:relative;width:194mm;min-height:277mm;margin:0 auto;background:#fff;color:#173d3b;font-family:Tahoma,Arial,sans-serif;box-sizing:border-box;padding:12mm;-webkit-font-smoothing:antialiased;';
+    report.style.cssText = 'position:relative;width:190mm;min-height:277mm;margin:0 auto;background:#fff;color:#173d3b;font-family:Tahoma,Arial,sans-serif;box-sizing:border-box;padding:8mm;-webkit-font-smoothing:antialiased;';
 
     report.innerHTML = `
       <div style="border:1px solid #d8c18e;border-radius:20px;overflow:hidden;background:#fff;">
@@ -145,26 +145,28 @@
     const oldText = button?.textContent;
     if (button) {
       button.disabled = true;
-      button.textContent = 'جاري تجهيز التقرير...';
+      button.textContent = 'جاري تجهيز تقرير A4...';
     }
 
     const report = buildReport(data);
 
-    // مهم لأجهزة iPhone/iPad: html2canvas قد ينتج صفحة بيضاء إذا كان العنصر
-    // خارج مساحة العرض (مثل left:-10000px). لذلك نضع التقرير مؤقتًا داخل
-    // طبقة فعلية في الشاشة أثناء الالتقاط ثم نحذفها بعد إنشاء الملف.
+    // نُنشئ مساحة فعلية بعرض ورقة A4 كاملة، وليس بعرض شاشة الجوال.
+    // هذا يمنع iPhone/Chrome من قص النصف الأيسر من التقرير أثناء الالتقاط.
     const stage = document.createElement('div');
     stage.id = 'masarPdfStage';
     stage.style.cssText = [
       'position:fixed',
-      'inset:0',
+      'top:0',
+      'left:0',
+      'width:210mm',
+      'min-height:297mm',
       'z-index:2147483646',
-      'overflow:auto',
+      'overflow:visible',
       'background:#f3f1eb',
-      'padding:8px',
-      'box-sizing:border-box',
-      '-webkit-overflow-scrolling:touch'
+      'padding:10mm',
+      'box-sizing:border-box'
     ].join(';');
+    report.style.margin = '0';
     stage.appendChild(report);
 
     const oldBodyOverflow = document.body.style.overflow;
@@ -173,35 +175,53 @@
 
     try {
       if (document.fonts?.ready) {
-        try { await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 700))]); } catch {}
+        try { await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 800))]); } catch {}
       }
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      if (typeof window.html2pdf !== 'function') {
+      const html2canvasFn = window.html2canvas;
+      const JsPdf = window.jspdf?.jsPDF || window.jsPDF;
+
+      if (typeof html2canvasFn !== 'function' || typeof JsPdf !== 'function') {
         printFallback(report);
         return;
       }
 
-      const options = {
-        margin: [8, 8, 8, 8],
-        filename: fileName(data),
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: Math.min(2, window.devicePixelRatio || 1.5),
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          letterRendering: true,
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: Math.max(report.scrollWidth, document.documentElement.clientWidth),
-          windowHeight: Math.max(report.scrollHeight, document.documentElement.clientHeight)
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
+      const reportWidth = Math.ceil(report.scrollWidth);
+      const reportHeight = Math.ceil(report.scrollHeight);
+      const canvas = await html2canvasFn(report, {
+        scale: Math.min(1.7, Math.max(1.25, window.devicePixelRatio || 1.5)),
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        letterRendering: true,
+        scrollX: 0,
+        scrollY: 0,
+        width: reportWidth,
+        height: reportHeight,
+        windowWidth: Math.max(reportWidth + 80, 794),
+        windowHeight: Math.max(reportHeight + 80, 1123),
+        logging: false
+      });
 
-      await window.html2pdf().set(options).from(report).save();
-      if (typeof toastMsg === 'function') toastMsg('تم تجهيز تقرير PDF');
+      // إنشاء صفحة PDF واحدة بمقاس A4 الحقيقي 210×297 مم.
+      // الصورة تُصغّر تلقائياً داخل هامش طباعة 10 مم من جميع الجهات،
+      // لذلك لا يحدث قص أفقي ولا انتقال جزء صغير إلى صفحة ثانية.
+      const pdf = new JsPdf({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 10;
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - margin * 2;
+      const scale = Math.min(maxW / canvas.width, maxH / canvas.height);
+      const imgW = canvas.width * scale;
+      const imgH = canvas.height * scale;
+      const x = (pageW - imgW) / 2;
+      const y = (pageH - imgH) / 2;
+      const imgData = canvas.toDataURL('image/jpeg', 0.96);
+
+      pdf.addImage(imgData, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
+      pdf.save(fileName(data));
+      if (typeof toastMsg === 'function') toastMsg('تم تجهيز تقرير A4 للطباعة');
     } catch (error) {
       console.error('PDF export failed', error);
       printFallback(report);
