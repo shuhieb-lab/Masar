@@ -1,9 +1,10 @@
-const CACHE = 'masar-v033';
+const CACHE = 'masar-v034';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './roles-patch.js',
   './config.js',
   './manifest.webmanifest',
   './icon-192.png',
@@ -12,9 +13,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
   self.skipWaiting();
 });
 
@@ -29,13 +28,15 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
 
+  const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
   if (
     url.pathname.endsWith('/config.js') ||
     url.pathname.endsWith('config.js') ||
+    url.pathname.endsWith('/roles-patch.js') ||
+    url.pathname.endsWith('roles-patch.js') ||
     url.pathname.endsWith('/pdf-export.js') ||
     url.pathname.endsWith('pdf-export.js')
   ) {
