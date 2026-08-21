@@ -21,6 +21,32 @@
     .teacher-login-note{background:#f8f3e6;border:1px solid #ead9a7;border-radius:14px;padding:12px 14px;line-height:1.8;color:#71591d}
     .password-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     @media(max-width:560px){.password-grid{grid-template-columns:1fr}}
+    .developer-credit{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      direction:rtl;
+      color:#81908c;
+      font-size:11px;
+      letter-spacing:.1px;
+    }
+    .developer-credit strong{
+      color:#9a7425;
+      font-weight:800;
+    }
+    .login-credit{
+      margin-top:18px;
+      padding-top:14px;
+      border-top:1px solid rgba(11,119,114,.08);
+    }
+    .settings-credit{
+      margin:26px auto 10px;
+      padding:14px 18px;
+      width:max-content;
+      max-width:100%;
+      border-top:1px solid rgba(11,119,114,.10);
+    }
   `;
   document.head.appendChild(style);
 
@@ -114,7 +140,19 @@
   renderSettings = function () {
     baseRenderSettings();
 
-    if (mode !== 'cloud') return;
+    const appendDeveloperCredit = () => {
+      if (app.querySelector('.settings-credit')) return;
+      app.insertAdjacentHTML('beforeend', `
+        <div class="developer-credit settings-credit" aria-label="حقوق التطوير">
+          <span>طُوّر بواسطة</span>
+          <strong>عبدالمنعم الشهيب</strong>
+        </div>`);
+    };
+
+    if (mode !== 'cloud') {
+      appendDeveloperCredit();
+      return;
+    }
 
     const role = currentRole();
 
@@ -170,6 +208,8 @@
       document.getElementById('changePasswordForm').reset();
       toastMsg('تم تغيير كلمة المرور بنجاح');
     };
+
+    appendDeveloperCredit();
   };
 
   async function fetchTeachers() {
