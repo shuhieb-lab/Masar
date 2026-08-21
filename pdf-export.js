@@ -54,7 +54,7 @@
     const report = document.createElement('div');
     report.id = 'masarPdfReport';
     report.dir = 'rtl';
-    report.style.cssText = 'position:absolute;left:-10000px;top:0;width:194mm;background:#fff;color:#173d3b;font-family:Tahoma,Arial,sans-serif;box-sizing:border-box;padding:12mm;';
+    report.style.cssText = 'position:relative;width:194mm;min-height:277mm;margin:0 auto;background:#fff;color:#173d3b;font-family:Tahoma,Arial,sans-serif;box-sizing:border-box;padding:12mm;-webkit-font-smoothing:antialiased;';
 
     report.innerHTML = `
       <div style="border:1px solid #d8c18e;border-radius:20px;overflow:hidden;background:#fff;">
@@ -149,9 +149,34 @@
     }
 
     const report = buildReport(data);
-    document.body.appendChild(report);
+
+    // مهم لأجهزة iPhone/iPad: html2canvas قد ينتج صفحة بيضاء إذا كان العنصر
+    // خارج مساحة العرض (مثل left:-10000px). لذلك نضع التقرير مؤقتًا داخل
+    // طبقة فعلية في الشاشة أثناء الالتقاط ثم نحذفها بعد إنشاء الملف.
+    const stage = document.createElement('div');
+    stage.id = 'masarPdfStage';
+    stage.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:2147483646',
+      'overflow:auto',
+      'background:#f3f1eb',
+      'padding:8px',
+      'box-sizing:border-box',
+      '-webkit-overflow-scrolling:touch'
+    ].join(';');
+    stage.appendChild(report);
+
+    const oldBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.appendChild(stage);
 
     try {
+      if (document.fonts?.ready) {
+        try { await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 700))]); } catch {}
+      }
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       if (typeof window.html2pdf !== 'function') {
         printFallback(report);
         return;
@@ -162,12 +187,14 @@
         filename: fileName(data),
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
-          scale: 2,
+          scale: Math.min(2, window.devicePixelRatio || 1.5),
           useCORS: true,
           backgroundColor: '#ffffff',
           letterRendering: true,
           scrollX: 0,
-          scrollY: 0
+          scrollY: 0,
+          windowWidth: Math.max(report.scrollWidth, document.documentElement.clientWidth),
+          windowHeight: Math.max(report.scrollHeight, document.documentElement.clientHeight)
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'] }
@@ -179,7 +206,8 @@
       console.error('PDF export failed', error);
       printFallback(report);
     } finally {
-      report.remove();
+      stage.remove();
+      document.body.style.overflow = oldBodyOverflow;
       if (button) {
         button.disabled = false;
         button.textContent = oldText || 'تصدير تقرير الحالة PDF';

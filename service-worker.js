@@ -1,10 +1,10 @@
-const CACHE = 'masar-v03';
+const CACHE = 'masar-v031';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './pdf-export.js',
+  './pdf-export.js?v=0.3.1',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png'
